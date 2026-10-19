@@ -5,10 +5,7 @@ import org.gradle.api.tasks.compile.JavaCompile
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.jetbrains.compose.internal.publishing.MavenCentralProperties
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.dsl.KotlinJsCompile
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
-import org.jetbrains.kotlin.gradle.tasks.KotlinNativeCompile
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.gradle.kotlin.dsl.withType
 import tasks.configuration.*
@@ -205,24 +202,11 @@ repositories {
 }
 
 kotlin {
-    compilerOptions {
-        languageVersion.set(skikoKotlinLanguageVersion)
-        apiVersion.set(skikoKotlinApiVersion)
-        freeCompilerArgs.add(
-            "-opt-in=org.jetbrains.skiko.InternalSkikoApi"
-        )
-    }
-
     applyHierarchyTemplate(skikoSourceSetHierarchyTemplate)
     skikoProjectContext.declareSkiaTasks()
 
     if (supportAwt) {
         jvm("awt") {
-            compilations.all {
-                compileTaskProvider.configure {
-                    compilerOptions.jvmTarget.set(JvmTarget.JVM_11)
-                }
-            }
             generateVersion(targetOs, targetArch, skiko)
         }
     }
@@ -234,10 +218,6 @@ kotlin {
             minSdk = 24
             withJava()
             withHostTest {}
-
-            compilerOptions {
-                jvmTarget.set(JvmTarget.JVM_11)
-            }
         }
     }
 
@@ -379,11 +359,6 @@ kotlin {
     }
 
     if (supportAnyNative) {
-        sourceSets.all {
-            // Really ugly, see https://youtrack.jetbrains.com/issue/KT-46649 why it is required,
-            // note that setting it per source set still keeps it unset in commonized source sets.
-            languageSettings.optIn("kotlin.native.SymbolNameIsInternal")
-        }
         configureIOSTestsWithMetal(project)
     }
 }
@@ -552,10 +527,4 @@ tasks.register("printSkiaVersion") {
     }
 }
 
-tasks.withType<KotlinNativeCompile>().configureEach {
-    compilerOptions.freeCompilerArgs.add("-opt-in=kotlinx.cinterop.ExperimentalForeignApi")
-}
-
-tasks.withType<KotlinCompilationTask<*>>().configureEach {
-    compilerOptions.freeCompilerArgs.add("-Xexpect-actual-classes")
-}
+configureKotlinCompilerOptions()

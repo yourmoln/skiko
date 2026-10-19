@@ -6,11 +6,19 @@ import SkiaBuildType
 import SkikoProperties
 import org.gradle.api.DefaultTask
 import org.gradle.api.Project
+import org.gradle.kotlin.dsl.configure
 import org.gradle.kotlin.dsl.getByType
+import org.gradle.kotlin.dsl.withType
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 import org.jetbrains.kotlin.gradle.plugin.KotlinTarget
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
+import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
+import org.jetbrains.kotlin.gradle.tasks.KotlinNativeCompile
 import registerSkikoTask
 import skiaVersion
+import skikoKotlinApiVersion
+import skikoKotlinLanguageVersion
 import supportAndroid
 import supportNativeIosArm64
 import supportNativeIosSimulatorArm64
@@ -376,5 +384,28 @@ fun KotlinTarget.generateVersion(
     // Make IDEA run the generation during Gradle sync, so that the file resolves without building first
     project.tasks.matching { it.name == "prepareKotlinIdeaImport" }.configureEach {
         dependsOn(generateVersionTask)
+    }
+}
+
+fun Project.configureKotlinCompilerOptions() {
+    extensions.configure<KotlinMultiplatformExtension> {
+        compilerOptions {
+            languageVersion.set(skikoKotlinLanguageVersion)
+            apiVersion.set(skikoKotlinApiVersion)
+            freeCompilerArgs.add("-opt-in=org.jetbrains.skiko.InternalSkikoApi")
+        }
+    }
+    tasks.withType<KotlinJvmCompile>().configureEach {
+        compilerOptions.jvmTarget.set(JvmTarget.JVM_11)
+    }
+    // Skiko bindings use kotlin.native.SymbolName, which is internal to Kotlin/Native (KT-46649).
+    tasks.withType<KotlinNativeCompile>().configureEach {
+        compilerOptions.freeCompilerArgs.addAll(
+            "-opt-in=kotlinx.cinterop.ExperimentalForeignApi",
+            "-opt-in=kotlin.native.SymbolNameIsInternal",
+        )
+    }
+    tasks.withType<KotlinCompilationTask<*>>().configureEach {
+        compilerOptions.freeCompilerArgs.add("-Xexpect-actual-classes")
     }
 }

@@ -4,9 +4,6 @@ import org.jetbrains.compose.internal.publishing.MavenCentralProperties
 import org.gradle.api.tasks.testing.AbstractTestTask
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
-import org.jetbrains.kotlin.gradle.tasks.KotlinNativeCompile
 import org.gradle.kotlin.dsl.withType
 import tasks.configuration.*
 import dsl.SkikoDependencyScope
@@ -85,22 +82,10 @@ repositories {
 }
 
 kotlin.run {
-    compilerOptions {
-        languageVersion.set(skikoKotlinLanguageVersion)
-        apiVersion.set(skikoKotlinApiVersion)
-        freeCompilerArgs.add("-opt-in=org.jetbrains.skiko.InternalSkikoApi")
-    }
-
     applyHierarchyTemplate(skikoSourceSetHierarchyTemplate)
 
     if (supportAwt) {
-        jvm("awt") {
-            compilations.all {
-                compileTaskProvider.configure {
-                    compilerOptions.jvmTarget.set(JvmTarget.JVM_11)
-                }
-            }
-        }
+        jvm("awt")
     }
 
 
@@ -166,11 +151,6 @@ kotlin.run {
 
 
     if (supportAnyNative) {
-        sourceSets.all {
-            // Really ugly, see https://youtrack.jetbrains.com/issue/KT-46649 why it is required,
-            // note that setting it per source set still keeps it unset in commonized source sets.
-            languageSettings.optIn("kotlin.native.SymbolNameIsInternal")
-        }
         configureIOSTestsWithMetal(project)
     }
 }
@@ -220,13 +200,7 @@ if (skiko.isTeamcityCIBuild || mavenCentral.signArtifacts) {
     configureSignAndPublishDependencies()
 }
 
-tasks.withType<KotlinNativeCompile>().configureEach {
-    compilerOptions.freeCompilerArgs.add("-opt-in=kotlinx.cinterop.ExperimentalForeignApi")
-}
-
-tasks.withType<KotlinCompilationTask<*>>().configureEach {
-    compilerOptions.freeCompilerArgs.add("-Xexpect-actual-classes")
-}
+configureKotlinCompilerOptions()
 
 tasks.withType<AbstractTestTask> {
     testLogging {

@@ -13,6 +13,8 @@ internal class Direct3DRenderer(
 
     private var drawLock = Any()
     private var isSwapChainInitialized = false
+    private var observedRuntimeShaderImageFilterCreationToken =
+        RuntimeShaderImageFilterTracker.creationToken
 
     // Native LiveResizeState, 0 if the hook isn't installed.
     private var liveResizeHandle: Long = 0L
@@ -107,6 +109,9 @@ internal class Direct3DRenderer(
     }
 
     private fun LayerDrawScope.drawFrame() {
+        // Filters are normally created before the frame that draws them, so reject them before
+        // initializing the swap chain or recording any Direct3D work.
+        rejectRuntimeShaderImageFilters()
         if (!ensureContext()) {
             throw RenderException("Cannot init graphic Direct3D context")
         }
@@ -115,7 +120,21 @@ internal class Direct3DRenderer(
             clear(Color.TRANSPARENT)
             layer.draw(this)
         }
+        // Direct3D can block the rendering thread for tens of seconds while creating the first
+        // pipeline for a runtime-shader image filter (SKIKO-1179). Drop this frame before the
+        // flush so SkiaLayer can switch to the next renderer API without submitting the stall.
+        rejectRuntimeShaderImageFilters()
         flushFrame()
+    }
+
+    private fun rejectRuntimeShaderImageFilters() {
+        val creationToken = RuntimeShaderImageFilterTracker.creationToken
+        if (creationToken !== observedRuntimeShaderImageFilterCreationToken) {
+            observedRuntimeShaderImageFilterCreationToken = creationToken
+            throw RenderException(
+                "Direct3D cannot safely render runtime shader image filters; falling back"
+            )
+        }
     }
 
     private fun ensureContext(): Boolean {

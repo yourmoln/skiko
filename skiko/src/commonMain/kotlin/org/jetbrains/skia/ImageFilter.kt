@@ -418,7 +418,9 @@ class ImageFilter internal constructor(ptr: NativePointer) : RefCnt(ptr) {
                             childShaderName = toInterop(shaderName),
                             input = getPtr(input)
                         )
-                    )
+                    ).also {
+                        RuntimeShaderImageFilterTracker.onRuntimeShaderImageFilterCreated()
+                    }
                 }
             } finally {
                 reachabilityBarrier(runtimeShaderBuilder)
@@ -441,7 +443,9 @@ class ImageFilter internal constructor(ptr: NativePointer) : RefCnt(ptr) {
                             inputs = toInterop(inputPtrs),
                             inputLength = inputPtrs.size
                         )
-                    )
+                    ).also {
+                        RuntimeShaderImageFilterTracker.onRuntimeShaderImageFilterCreated()
+                    }
                 }
             } finally {
                 reachabilityBarrier(runtimeShaderBuilder)

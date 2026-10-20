@@ -22,6 +22,7 @@ import org.jetbrains.skiko.util.UiTestScope
 import org.jetbrains.skiko.util.UiTestWindow
 import org.jetbrains.skiko.util.uiTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assume.assumeFalse
 import org.junit.Assume.assumeTrue
 import org.junit.Ignore
@@ -741,6 +742,73 @@ class SkiaLayerTest {
 
             assertEquals(GraphicsApi.SOFTWARE_COMPAT, window.layer.renderApi)
             assertTrue(rendererChangedCallbackInvoked)
+        } finally {
+            window.close()
+        }
+    }
+
+    @OptIn(ExperimentalAtomicApi::class)
+    @Test(timeout = 60000)
+    fun `runtime shader image filters fall back from Direct3D`() = uiTest {
+        assumeTrue(hostOs == OS.Windows)
+        if (renderApi != GraphicsApi.DIRECT3D) return@uiTest
+
+        val window = UiTestWindow()
+        try {
+            window.setLocation(200, 200)
+            window.setSize(400, 200)
+            val firstFrameRendered = AtomicBoolean(false)
+            val filter = AtomicReference<ImageFilter?>(null)
+            val filterDrawn = AtomicBoolean(false)
+            window.layer.renderDelegate = object : SkikoRenderDelegate {
+                override fun onRender(canvas: Canvas, width: Int, height: Int, nanoTime: Long) {
+                    val imageFilter = filter.load()
+                    if (imageFilter == null) {
+                        firstFrameRendered.set(true)
+                        return
+                    }
+
+                    val paint = Paint().apply { this.imageFilter = imageFilter }
+                    canvas.saveLayer(0f, 0f, width.toFloat(), height.toFloat(), paint)
+                    canvas.clear(0xFFFFFFFF.toInt())
+                    canvas.restore()
+                    filterDrawn.set(true)
+                }
+            }
+            window.isVisible = true
+
+            withTimeout(10.seconds) {
+                while (
+                    !firstFrameRendered.get() ||
+                    window.layer.renderApi != GraphicsApi.DIRECT3D
+                ) {
+                    delay(50.milliseconds)
+                }
+            }
+
+            val effect = RuntimeEffect.makeForShader(
+                """
+                    uniform shader content;
+                    vec4 main(vec2 coord) {
+                        return content.eval(coord);
+                    }
+                """
+            )
+            val builder = RuntimeShaderBuilder(effect)
+            filter.store(ImageFilter.makeRuntimeShader(builder, "content", null))
+            window.layer.needRender()
+
+            withTimeout(10.seconds) {
+                while (window.layer.renderApi == GraphicsApi.DIRECT3D) {
+                    delay(50.milliseconds)
+                }
+            }
+            withTimeout(10.seconds) {
+                while (!filterDrawn.get()) {
+                    delay(50.milliseconds)
+                }
+            }
+            assertNotEquals(GraphicsApi.DIRECT3D, window.layer.renderApi)
         } finally {
             window.close()
         }
